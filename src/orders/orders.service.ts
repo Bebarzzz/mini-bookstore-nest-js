@@ -1,26 +1,33 @@
 import { Injectable } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
+import { DatabaseService } from '../database/database.service.js';
 
 @Injectable()
 export class OrdersService {
-  create(createOrderDto: CreateOrderDto) {
-    return 'This action adds a new order';
+  constructor(private readonly databaseService: DatabaseService) { }
+
+  async create(createOrderDto: CreateOrderDto) {
+    return this.databaseService.createOrder(createOrderDto.userId!, createOrderDto.items);
   }
 
-  findAll() {
-    return `This action returns all orders`;
+  async findAll() {
+    return this.databaseService.findAllOrders();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} order`;
+  async findByUserId(userId: string) {
+    return this.databaseService.findOrdersByUser(userId);
   }
 
-  update(id: number, updateOrderDto: UpdateOrderDto) {
-    return `This action updates a #${id} order`;
+  async findOne(id: string) {
+    return this.databaseService.findOrderById(id);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} order`;
+  async update(id: string, updateOrderDto: UpdateOrderDto) {
+    return this.databaseService.updateOrder(id, updateOrderDto);
+  }
+
+  async remove(id: string) {
+    return this.databaseService.deleteOrder(id);
   }
 }

@@ -2,6 +2,7 @@ import { Global, Logger, Module } from '@nestjs/common';
 import { Pool } from 'pg';
 import { DatabaseService } from './database.service.js';
 
+
 // 1. Make the module global so you don't have to import it everywhere
 @Global()
 @Module({
