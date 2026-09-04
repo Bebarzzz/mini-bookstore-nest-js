@@ -4,8 +4,8 @@ import { AppService } from './app.service.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ProductsModule } from './products/products.module.js';
-import { OrdersModule } from './orders/orders.module.js';
 import { ReviewsModule } from './reviews/reviews.module.js';
+import { OrdersModule } from './orders/orders.module.js';
 
 @Module({
   imports: [DatabaseModule, AuthModule, ProductsModule, OrdersModule, ReviewsModule],
@@ -13,5 +13,5 @@ import { ReviewsModule } from './reviews/reviews.module.js';
   providers: [AppService],
 })
 export class AppModule implements NestModule {
-  configure() {}
+  configure() { }
 }
