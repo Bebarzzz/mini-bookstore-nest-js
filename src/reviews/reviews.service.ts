@@ -6,21 +6,28 @@ import {
 } from '@nestjs/common';
 import { CreateReviewDto } from './dto/create-review.dto.js';
 import { UpdateReviewDto } from './dto/update-review.dto.js';
-import { DatabaseService } from '../database/database.service.js';
+import { QueryReviewsDto } from './dto/query-reviews.dto.js';
+import { ReviewsRepository } from './reviews.repository.js';
+import { OrdersRepository } from '../orders/orders.repository.js';
+import { ProductsRepository } from '../products/products.repository.js';
 
 @Injectable()
 export class ReviewsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly reviewsRepo: ReviewsRepository,
+    private readonly ordersRepo: OrdersRepository,
+    private readonly productsRepo: ProductsRepository,
+  ) {}
 
   async create(userId: string, createReviewDto: CreateReviewDto) {
-    // 1. Confirm product exists
-    const product = await this.databaseService.findProductById(createReviewDto.productId);
+    // 1. Confirm product exists via ProductsRepository
+    const product = await this.productsRepo.findById(createReviewDto.productId);
     if (!product) {
       throw new NotFoundException(`Product with ID ${createReviewDto.productId} not found`);
     }
 
-    // 2. Cross-domain check: confirm buyer actually purchased this product via Orders -> OrderItems
-    const hasPurchased = await this.databaseService.hasUserPurchasedProduct(
+    // 2. Cross-domain check: confirm buyer actually purchased this product via OrdersRepository
+    const hasPurchased = await this.ordersRepo.hasUserPurchasedProduct(
       userId,
       createReviewDto.productId,
     );
@@ -29,7 +36,7 @@ export class ReviewsService {
     }
 
     // 3. Prevent duplicate reviews by the same buyer for the same product
-    const existing = await this.databaseService.findReviewByUserAndProduct(
+    const existing = await this.reviewsRepo.findByUserAndProduct(
       userId,
       createReviewDto.productId,
     );
@@ -37,7 +44,7 @@ export class ReviewsService {
       throw new ConflictException('You have already submitted a review for this product');
     }
 
-    return this.databaseService.createReview(
+    return this.reviewsRepo.create(
       userId,
       createReviewDto.productId,
       createReviewDto.rating,
@@ -45,16 +52,16 @@ export class ReviewsService {
     );
   }
 
-  async findAll() {
-    return this.databaseService.findAllReviews();
+  async findAll(queryDto?: QueryReviewsDto) {
+    return this.reviewsRepo.findAll(queryDto);
   }
 
-  async findByProduct(productId: string) {
-    return this.databaseService.findReviewsByProduct(productId);
+  async findByProduct(productId: string, queryDto?: QueryReviewsDto) {
+    return this.reviewsRepo.findByProduct(productId, queryDto);
   }
 
   async findOne(id: string) {
-    const review = await this.databaseService.findReviewById(id);
+    const review = await this.reviewsRepo.findById(id);
     if (!review) {
       throw new NotFoundException(`Review with ID ${id} not found`);
     }
@@ -66,7 +73,7 @@ export class ReviewsService {
     if (String(review.userId) !== String(userId)) {
       throw new ForbiddenException('You can only update your own review');
     }
-    return this.databaseService.updateReview(id, updateReviewDto);
+    return this.reviewsRepo.update(id, updateReviewDto);
   }
 
   async remove(id: string, userId: string) {
@@ -74,6 +81,6 @@ export class ReviewsService {
     if (String(review.userId) !== String(userId)) {
       throw new ForbiddenException('You can only delete your own review');
     }
-    return this.databaseService.deleteReview(id);
+    return this.reviewsRepo.delete(id);
   }
 }

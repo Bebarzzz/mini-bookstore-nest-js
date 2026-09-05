@@ -6,11 +6,14 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ReviewsService } from './reviews.service.js';
 import { CreateReviewDto } from './dto/create-review.dto.js';
 import { UpdateReviewDto } from './dto/update-review.dto.js';
+import { QueryReviewsDto } from './dto/query-reviews.dto.js';
 import { JwtAuthGuard } from '../guards/jwt-auth/jwt-auth.guard.js';
 import { RolesGuard } from '../guards/roles/roles.guard.js';
 import { Roles } from '../decorators/roles/roles.decorator.js';
@@ -31,17 +34,20 @@ export class ReviewsController {
   }
 
   @Get()
-  findAll() {
-    return this.reviewsService.findAll();
+  findAll(@Query() queryDto: QueryReviewsDto) {
+    return this.reviewsService.findAll(queryDto);
   }
 
   @Get('product/:productId')
-  findByProduct(@Param('productId') productId: string) {
-    return this.reviewsService.findByProduct(productId);
+  findByProduct(
+    @Param('productId', new ParseUUIDPipe()) productId: string,
+    @Query() queryDto: QueryReviewsDto,
+  ) {
+    return this.reviewsService.findByProduct(productId, queryDto);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.reviewsService.findOne(id);
   }
 
@@ -49,7 +55,7 @@ export class ReviewsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('buyer')
   update(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updateReviewDto: UpdateReviewDto,
     @CurrentUser() user: { id: string; role: string },
   ) {
@@ -60,7 +66,7 @@ export class ReviewsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('buyer')
   remove(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @CurrentUser() user: { id: string; role: string },
   ) {
     return this.reviewsService.remove(id, user.id);

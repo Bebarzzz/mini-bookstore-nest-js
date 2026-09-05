@@ -1,5 +1,4 @@
-// register.dto.ts
-import { IsEmail, IsString, MinLength, IsIn } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsIn } from 'class-validator';
 
 export class RegisterDto {
     @IsEmail()
@@ -7,6 +6,7 @@ export class RegisterDto {
 
     @IsString()
     @MinLength(8)
+    @MaxLength(72)
     password: string;
 
     @IsIn(['buyer', 'seller'])

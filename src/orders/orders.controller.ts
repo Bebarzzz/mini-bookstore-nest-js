@@ -6,13 +6,16 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
   NotFoundException,
   ForbiddenException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
+import { QueryOrdersDto } from './dto/query-orders.dto.js';
 import { JwtAuthGuard } from '../guards/jwt-auth/jwt-auth.guard.js';
 import { RolesGuard } from '../guards/roles/roles.guard.js';
 import { Roles } from '../decorators/roles/roles.decorator.js';
@@ -39,22 +42,25 @@ export class OrdersController {
 
   /**
    * GET /orders
-   * Sellers (admins) can see all orders.
+   * Sellers (admins) can see all orders with pagination.
    */
   @Get()
   @Roles('seller')
-  findAll() {
-    return this.ordersService.findAll();
+  findAll(@Query() queryDto: QueryOrdersDto) {
+    return this.ordersService.findAll(queryDto);
   }
 
   /**
    * GET /orders/my
-   * Buyers can see their own orders.
+   * Buyers can see their own orders with pagination.
    */
   @Get('my')
   @Roles('buyer')
-  findMyOrders(@CurrentUser() user: { id: string; role: string }) {
-    return this.ordersService.findByUserId(user.id);
+  findMyOrders(
+    @CurrentUser() user: { id: string; role: string },
+    @Query() queryDto: QueryOrdersDto,
+  ) {
+    return this.ordersService.findByUserId(user.id, queryDto);
   }
 
   /**
@@ -64,7 +70,7 @@ export class OrdersController {
   @Get(':id')
   @Roles('buyer', 'seller')
   async findOne(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @CurrentUser() user: { id: string; role: string },
   ) {
     const order = await this.ordersService.findOne(id);
@@ -83,7 +89,10 @@ export class OrdersController {
    */
   @Patch(':id')
   @Roles('seller')
-  update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() updateOrderDto: UpdateOrderDto,
+  ) {
     return this.ordersService.update(id, updateOrderDto);
   }
 
@@ -93,7 +102,7 @@ export class OrdersController {
    */
   @Delete(':id')
   @Roles('seller')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.ordersService.remove(id);
   }
 }

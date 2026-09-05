@@ -1,5 +1,5 @@
 import { Injectable, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
-import { DatabaseService } from '../database/database.service.js';
+import { UsersRepository } from './users.repository.js';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 
@@ -7,13 +7,16 @@ import { JwtService } from '@nestjs/jwt';
 export class AuthService {
     private readonly logger = new Logger(AuthService.name);
 
-    constructor(private db: DatabaseService, private jwtService: JwtService) { }
+    constructor(
+        private readonly usersRepo: UsersRepository,
+        private readonly jwtService: JwtService,
+    ) { }
 
     async register(email: string, password: string, role: 'buyer' | 'seller') {
         this.logger.log(`Register attempt for email: ${email}`);
 
         // 1. Check if email already exists
-        const existingUser = await this.db.findUserByEmail(email);
+        const existingUser = await this.usersRepo.findByEmail(email);
         if (existingUser) {
             this.logger.warn(`Registration failed - email already exists: ${email}`);
             throw new ConflictException('Email already exists'); // 409
@@ -23,7 +26,7 @@ export class AuthService {
         const passwordHash = await bcrypt.hash(password, 10);
 
         // 3. Create the user in the database
-        const user = await this.db.createUser(email, passwordHash, role);
+        const user = await this.usersRepo.createUser(email, passwordHash, role);
         this.logger.log(`User registered successfully: ${email} (role: ${role})`);
         return user;
     }
@@ -32,7 +35,7 @@ export class AuthService {
         this.logger.log(`Login attempt for email: ${email}`);
 
         // 1. Find user by email
-        const user = await this.db.findUserByEmail(email);
+        const user = await this.usersRepo.findByEmail(email);
         if (!user) {
             this.logger.warn(`Login failed - user not found: ${email}`);
             throw new UnauthorizedException('Invalid credentials'); // 401

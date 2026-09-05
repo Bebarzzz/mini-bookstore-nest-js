@@ -4,10 +4,11 @@ import { AuthService } from './auth.service.js';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy/jwt.strategy.js';
+import { UsersRepository } from './users.repository.js';
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, UsersRepository],
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
@@ -15,6 +16,6 @@ import { JwtStrategy } from './strategies/jwt.strategy/jwt.strategy.js';
       signOptions: { expiresIn: '1d' },
     }),
   ],
-  exports: [AuthService, PassportModule, JwtModule],
+  exports: [AuthService, PassportModule, JwtModule, UsersRepository],
 })
 export class AuthModule { }
