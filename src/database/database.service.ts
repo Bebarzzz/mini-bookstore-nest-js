@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, NotFoundException } from '@nestjs/common';
 import { Pool } from 'pg';
 
 
@@ -30,56 +30,169 @@ export class DatabaseService {
     return result.rows[0] ?? null;
   }
 
-  async createBook(title: string, author: string, price: number) {
+  async createProduct(
+    sellerId: string,
+    data: { title: string; author: string; price: number; category?: string; stock?: number },
+  ) {
+    const stock = data.stock ?? 0;
     const result = await this.pool.query(
-      `INSERT INTO books (title, author, price) VALUES ($1, $2, $3) RETURNING id, title, author, price, created_at`,
-      [title, author, price],
+      `INSERT INTO products (title, author, price, category, stock, seller_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, title, author, price, category, stock, seller_id AS "sellerId", created_at AS "createdAt", updated_at AS "updatedAt"`,
+      [data.title, data.author, data.price, data.category ?? null, stock, sellerId || null],
     );
     return result.rows[0];
   }
 
-  async findAllBooks() {
-    const result = await this.pool.query(
-      `SELECT * FROM books ORDER BY created_at DESC`,
+  async findAllProducts(filters: {
+    page?: number;
+    limit?: number;
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+  }) {
+    const page = Math.max(1, Number(filters.page) || 1);
+    const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
+    const offset = (page - 1) * limit;
+
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (filters.category) {
+      conditions.push(`p.category ILIKE $${paramIndex++}`);
+      values.push(`%${filters.category}%`);
+    }
+
+    if (filters.minPrice !== undefined && !isNaN(Number(filters.minPrice))) {
+      conditions.push(`p.price >= $${paramIndex++}`);
+      values.push(Number(filters.minPrice));
+    }
+
+    if (filters.maxPrice !== undefined && !isNaN(Number(filters.maxPrice))) {
+      conditions.push(`p.price <= $${paramIndex++}`);
+      values.push(Number(filters.maxPrice));
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await this.pool.query(
+      `SELECT COUNT(*)::int AS total FROM products p ${whereClause}`,
+      values,
     );
-    return result.rows;
+    const total = countResult.rows[0]?.total ?? 0;
+
+    const dataValues = [...values, limit, offset];
+    const dataQuery = `
+      SELECT 
+        p.id,
+        p.title,
+        p.author,
+        p.price,
+        p.category,
+        p.stock,
+        p.seller_id AS "sellerId",
+        p.created_at AS "createdAt",
+        p.updated_at AS "updatedAt",
+        json_build_object(
+          'id', u.id,
+          'email', u.email,
+          'role', u.role
+        ) AS seller
+      FROM products p
+      LEFT JOIN users u ON p.seller_id = u.id
+      ${whereClause}
+      ORDER BY p.created_at DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+
+    const dataResult = await this.pool.query(dataQuery, dataValues);
+
+    return {
+      data: dataResult.rows,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
-  async findBookById(id: number) {
+  async findProductById(id: string) {
     const result = await this.pool.query(
-      `SELECT * FROM books WHERE id = $1`,
+      `SELECT 
+        p.id,
+        p.title,
+        p.author,
+        p.price,
+        p.category,
+        p.stock,
+        p.seller_id AS "sellerId",
+        p.created_at AS "createdAt",
+        p.updated_at AS "updatedAt",
+        json_build_object(
+          'id', u.id,
+          'email', u.email,
+          'role', u.role
+        ) AS seller
+      FROM products p
+      LEFT JOIN users u ON p.seller_id = u.id
+      WHERE p.id::text = $1::text`,
       [id],
     );
     return result.rows[0] ?? null;
   }
 
-  async updateBook(id: number, title?: string, author?: string, price?: number) {
-
+  async updateProduct(
+    id: string,
+    data: { title?: string; author?: string; price?: number; category?: string; stock?: number },
+  ) {
     const fields: string[] = [];
-    const values: (number | string)[] = [id];
+    const values: any[] = [id];
     let i = 2;
 
-    if (title !== undefined) { fields.push(`title = $${i++}`); values.push(title); }
-    if (author !== undefined) { fields.push(`author = $${i++}`); values.push(author); }
-    if (price !== undefined) { fields.push(`price = $${i++}`); values.push(price); }
-    if (fields.length === 0) {
-      return this.findBookById(id);
+    if (data.title !== undefined) {
+      fields.push(`title = $${i++}`);
+      values.push(data.title);
     }
+    if (data.author !== undefined) {
+      fields.push(`author = $${i++}`);
+      values.push(data.author);
+    }
+    if (data.price !== undefined) {
+      fields.push(`price = $${i++}`);
+      values.push(data.price);
+    }
+    if (data.category !== undefined) {
+      fields.push(`category = $${i++}`);
+      values.push(data.category);
+    }
+    if (data.stock !== undefined) {
+      fields.push(`stock = $${i++}`);
+      values.push(data.stock);
+    }
+
+    if (fields.length === 0) {
+      return this.findProductById(id);
+    }
+
+    fields.push(`updated_at = NOW()`);
+
     const queryText = `
-    UPDATE books 
-    SET ${fields.join(', ')}
-    WHERE id = $1
-    RETURNING id, title, author, price, created_at
-  `;
+      UPDATE products 
+      SET ${fields.join(', ')}
+      WHERE id::text = $1::text
+      RETURNING id, title, author, price, category, stock, seller_id AS "sellerId", created_at AS "createdAt", updated_at AS "updatedAt"
+    `;
 
     const result = await this.pool.query(queryText, values);
     return result.rows[0] ?? null;
-
   }
 
-  async deleteBook(id: number) {
+  async deleteProduct(id: string) {
     const result = await this.pool.query(
-      `DELETE FROM books WHERE id = $1 RETURNING id`,
+      `DELETE FROM products WHERE id::text = $1::text RETURNING id`,
       [id],
     );
     return result.rows[0] ?? null;
@@ -106,19 +219,31 @@ export class DatabaseService {
       const preparedItems: Array<{ bookId: string | number; quantity: number; price: number }> = [];
 
       for (const item of items) {
-        let price = item.price;
-        if (price === undefined) {
-          const productRes = await client.query(
-            `SELECT price FROM products WHERE id::text = $1::text LIMIT 1`,
-            [item.bookId],
-          );
-          if (productRes.rows[0]) {
-            price = Number(productRes.rows[0].price);
-          } else {
-            price = 0;
-          }
+        // 1. Lock the product row using SELECT ... FOR UPDATE to prevent race conditions & overselling
+        const productRes = await client.query(
+          `SELECT id, title, price, stock FROM products WHERE id::text = $1::text FOR UPDATE`,
+          [item.bookId],
+        );
+
+        const product = productRes.rows[0];
+        if (!product) {
+          throw new NotFoundException(`Product with ID ${item.bookId} not found`);
         }
-        const itemPrice = Number(price);
+
+        // 2. Validate stock availability
+        if (Number(product.stock) < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for product "${product.title}" (ID: ${item.bookId}). Available: ${product.stock}, requested: ${item.quantity}`,
+          );
+        }
+
+        // 3. Decrement product stock within the transaction
+        await client.query(
+          `UPDATE products SET stock = stock - $1, updated_at = NOW() WHERE id::text = $2::text`,
+          [item.quantity, item.bookId],
+        );
+
+        const itemPrice = item.price !== undefined ? Number(item.price) : Number(product.price);
         totalPrice += itemPrice * item.quantity;
         preparedItems.push({
           bookId: item.bookId,
