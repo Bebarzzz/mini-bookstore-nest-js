@@ -26,7 +26,8 @@
     "migrate:down": "node --env-file=.env ./node_modules/node-pg-migrate/bin/node-pg-migrate down",
     "migrate:force": "node --env-file=.env ./node_modules/node-pg-migrate/bin/node-pg-migrate force",
     "db:start": "docker compose up -d postgres",
-    "db:down": "docker compose down"
+    "db:down": "docker compose down",
+    "seed": "node --env-file=.env scripts/seed.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -47,6 +48,7 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
     "@nestjs/cli": "^12.0.0",
     "@nestjs/mau": "^0.2.6",
     "@nestjs/schematics": "^12.0.0",

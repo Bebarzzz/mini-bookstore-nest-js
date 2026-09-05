@@ -2,6 +2,7 @@ export class Product {
   id: string;
   title: string;
   author: string;
+  description?: string;
   category?: string;
   price: number;
   stock: number;

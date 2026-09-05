@@ -9,6 +9,10 @@ export class CreateProductDto {
   @IsNotEmpty()
   author: string;
 
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @IsNumber()
   @Min(0)
   price: number;

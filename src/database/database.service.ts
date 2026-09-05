@@ -32,14 +32,29 @@ export class DatabaseService {
 
   async createProduct(
     sellerId: string,
-    data: { title: string; author: string; price: number; category?: string; stock?: number },
+    data: {
+      title: string;
+      author: string;
+      price: number;
+      category?: string;
+      stock?: number;
+      description?: string;
+    },
   ) {
     const stock = data.stock ?? 0;
     const result = await this.pool.query(
-      `INSERT INTO products (title, author, price, category, stock, seller_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, title, author, price, category, stock, seller_id AS "sellerId", created_at AS "createdAt", updated_at AS "updatedAt"`,
-      [data.title, data.author, data.price, data.category ?? null, stock, sellerId || null],
+      `INSERT INTO products (title, author, description, price, category, stock, seller_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, title, author, description, price, category, stock, seller_id AS "sellerId", created_at AS "createdAt", updated_at AS "updatedAt"`,
+      [
+        data.title,
+        data.author,
+        data.description ?? null,
+        data.price,
+        data.category ?? null,
+        stock,
+        sellerId || null,
+      ],
     );
     return result.rows[0];
   }
@@ -50,6 +65,7 @@ export class DatabaseService {
     category?: string;
     minPrice?: number;
     maxPrice?: number;
+    search?: string;
   }) {
     const page = Math.max(1, Number(filters.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(filters.limit) || 10));
@@ -58,6 +74,19 @@ export class DatabaseService {
     const conditions: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
+
+    let rankSelect = '';
+    let orderBy = 'ORDER BY p.created_at DESC';
+
+    // Full-Text Search via PostgreSQL tsvector & GIN index
+    if (filters.search && filters.search.trim() !== '') {
+      const searchParam = filters.search.trim();
+      const searchIdx = paramIndex++;
+      conditions.push(`p.search_vector @@ plainto_tsquery('english', $${searchIdx})`);
+      values.push(searchParam);
+      rankSelect = `, ts_rank(p.search_vector, plainto_tsquery('english', $${searchIdx})) AS rank`;
+      orderBy = `ORDER BY rank DESC, p.created_at DESC`;
+    }
 
     if (filters.category) {
       conditions.push(`p.category ILIKE $${paramIndex++}`);
@@ -88,12 +117,13 @@ export class DatabaseService {
         p.id,
         p.title,
         p.author,
+        p.description,
         p.price,
         p.category,
         p.stock,
         p.seller_id AS "sellerId",
         p.created_at AS "createdAt",
-        p.updated_at AS "updatedAt",
+        p.updated_at AS "updatedAt"${rankSelect},
         json_build_object(
           'id', u.id,
           'email', u.email,
@@ -102,7 +132,7 @@ export class DatabaseService {
       FROM products p
       LEFT JOIN users u ON p.seller_id = u.id
       ${whereClause}
-      ORDER BY p.created_at DESC
+      ${orderBy}
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
 
@@ -125,6 +155,7 @@ export class DatabaseService {
         p.id,
         p.title,
         p.author,
+        p.description,
         p.price,
         p.category,
         p.stock,
@@ -146,7 +177,14 @@ export class DatabaseService {
 
   async updateProduct(
     id: string,
-    data: { title?: string; author?: string; price?: number; category?: string; stock?: number },
+    data: {
+      title?: string;
+      author?: string;
+      price?: number;
+      category?: string;
+      stock?: number;
+      description?: string;
+    },
   ) {
     const fields: string[] = [];
     const values: any[] = [id];
@@ -159,6 +197,10 @@ export class DatabaseService {
     if (data.author !== undefined) {
       fields.push(`author = $${i++}`);
       values.push(data.author);
+    }
+    if (data.description !== undefined) {
+      fields.push(`description = $${i++}`);
+      values.push(data.description);
     }
     if (data.price !== undefined) {
       fields.push(`price = $${i++}`);
@@ -183,7 +225,7 @@ export class DatabaseService {
       UPDATE products 
       SET ${fields.join(', ')}
       WHERE id::text = $1::text
-      RETURNING id, title, author, price, category, stock, seller_id AS "sellerId", created_at AS "createdAt", updated_at AS "updatedAt"
+      RETURNING id, title, author, description, price, category, stock, seller_id AS "sellerId", created_at AS "createdAt", updated_at AS "updatedAt"
     `;
 
     const result = await this.pool.query(queryText, values);

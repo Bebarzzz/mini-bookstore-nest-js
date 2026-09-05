@@ -17,6 +17,10 @@ export class QueryProductsDto {
 
   @IsOptional()
   @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsString()
   category?: string;
 
   @IsOptional()
