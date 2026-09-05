@@ -387,20 +387,135 @@ export class DatabaseService {
     return result.rows[0] ?? null;
   }
 
-  async createReview(userId: number, bookId: number, rating: number, comment: string) {
+  async hasUserPurchasedProduct(userId: string, productId: string): Promise<boolean> {
     const result = await this.pool.query(
-      `INSERT INTO reviews (user_id, book_id, rating, comment) VALUES ($1, $2, $3, $4) RETURNING id, user_id, book_id, rating, comment, created_at`,
-      [userId, bookId, rating, comment],
+      `SELECT 1 FROM orders o
+       JOIN order_items oi ON o.id = oi.order_id
+       WHERE o.user_id::text = $1::text
+         AND oi.book_id::text = $2::text
+       LIMIT 1`,
+      [userId, productId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async createReview(userId: string, productId: string, rating: number, comment?: string) {
+    const result = await this.pool.query(
+      `INSERT INTO reviews (user_id, product_id, rating, comment)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, user_id AS "userId", product_id AS "productId", rating, comment, created_at AS "createdAt", updated_at AS "updatedAt"`,
+      [userId, productId, rating, comment ?? null],
     );
     return result.rows[0];
   }
 
-  async findReviewsByBook(bookId: number) {
+  async findReviewByUserAndProduct(userId: string, productId: string) {
     const result = await this.pool.query(
-      `SELECT r.*, u.email FROM reviews r JOIN users u ON r.user_id = u.id WHERE r.book_id = $1 ORDER BY r.created_at DESC`,
-      [bookId],
+      `SELECT id, user_id AS "userId", product_id AS "productId", rating, comment, created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM reviews
+       WHERE user_id::text = $1::text AND product_id::text = $2::text`,
+      [userId, productId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async findReviewsByProduct(productId: string) {
+    const result = await this.pool.query(
+      `SELECT 
+        r.id,
+        r.user_id AS "userId",
+        r.product_id AS "productId",
+        r.rating,
+        r.comment,
+        r.created_at AS "createdAt",
+        r.updated_at AS "updatedAt",
+        json_build_object('id', u.id, 'email', u.email) AS user
+       FROM reviews r
+       JOIN users u ON r.user_id = u.id
+       WHERE r.product_id::text = $1::text
+       ORDER BY r.created_at DESC`,
+      [productId],
     );
     return result.rows;
+  }
+
+  async findAllReviews() {
+    const result = await this.pool.query(
+      `SELECT 
+        r.id,
+        r.user_id AS "userId",
+        r.product_id AS "productId",
+        r.rating,
+        r.comment,
+        r.created_at AS "createdAt",
+        r.updated_at AS "updatedAt",
+        json_build_object('id', u.id, 'email', u.email) AS user,
+        json_build_object('id', p.id, 'title', p.title) AS product
+       FROM reviews r
+       JOIN users u ON r.user_id = u.id
+       JOIN products p ON r.product_id = p.id
+       ORDER BY r.created_at DESC`,
+    );
+    return result.rows;
+  }
+
+  async findReviewById(id: string) {
+    const result = await this.pool.query(
+      `SELECT 
+        r.id,
+        r.user_id AS "userId",
+        r.product_id AS "productId",
+        r.rating,
+        r.comment,
+        r.created_at AS "createdAt",
+        r.updated_at AS "updatedAt",
+        json_build_object('id', u.id, 'email', u.email) AS user,
+        json_build_object('id', p.id, 'title', p.title) AS product
+       FROM reviews r
+       JOIN users u ON r.user_id = u.id
+       JOIN products p ON r.product_id = p.id
+       WHERE r.id::text = $1::text`,
+      [id],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async updateReview(id: string, data: { rating?: number; comment?: string }) {
+    const fields: string[] = [];
+    const values: any[] = [id];
+    let i = 2;
+
+    if (data.rating !== undefined) {
+      fields.push(`rating = $${i++}`);
+      values.push(data.rating);
+    }
+    if (data.comment !== undefined) {
+      fields.push(`comment = $${i++}`);
+      values.push(data.comment);
+    }
+
+    if (fields.length === 0) {
+      return this.findReviewById(id);
+    }
+
+    fields.push(`updated_at = NOW()`);
+
+    const queryText = `
+      UPDATE reviews
+      SET ${fields.join(', ')}
+      WHERE id::text = $1::text
+      RETURNING id, user_id AS "userId", product_id AS "productId", rating, comment, created_at AS "createdAt", updated_at AS "updatedAt"
+    `;
+    const result = await this.pool.query(queryText, values);
+    return result.rows[0] ?? null;
+  }
+
+  async deleteReview(id: string) {
+    const result = await this.pool.query(
+      `DELETE FROM reviews WHERE id::text = $1::text RETURNING id`,
+      [id],
+    );
+    return result.rows[0] ?? null;
   }
 
 }
